@@ -1,55 +1,40 @@
 <?php
 
-use Illuminate\Contracts\Http\Kernel;
-use Illuminate\Http\Request;
+// check for common errors
+if (version_compare(phpversion(), '7.2', '<')) {
+    die("ERROR! The php version isn't high enough, you need at least 7.2 to run this application! But you have: " . phpversion());
+}
+extension_loaded("imap") || die('ERROR: IMAP extension not loaded. Please see the installation instructions in the README.md');
 
-define('LARAVEL_START', microtime(true));
 
-/*
-|--------------------------------------------------------------------------
-| Check If The Application Is Under Maintenance
-|--------------------------------------------------------------------------
-|
-| If the application is in maintenance / demo mode via the "down" command
-| we will load this file so that any pre-rendered content can be shown
-| instead of starting the framework, which could cause an exception.
-|
-*/
+# load php dependencies:
+require_once './vendor/autoload.php';
+require_once './config_helper.php';
+require_once './User.php';
+require_once './imap_client.php';
+require_once './controller.php';
 
-if (file_exists(__DIR__.'/../storage/framework/maintenance.php')) {
-    require __DIR__.'/../storage/framework/maintenance.php';
+load_config();
+
+$imapClient = new ImapClient($config['imap']['url'], $config['imap']['username'], $config['imap']['password']);
+
+if (DisplayEmailsController::matches()) {
+    DisplayEmailsController::invoke($imapClient, $config);
+} elseif (RedirectToAddressController::matches()) {
+    RedirectToAddressController::invoke($imapClient, $config);
+} elseif (RedirectToRandomAddressController::matches()) {
+    RedirectToRandomAddressController::invoke($imapClient, $config);
+} elseif (DownloadEmailController::matches()) {
+    DownloadEmailController::invoke($imapClient, $config);
+} elseif (DeleteEmailController::matches()) {
+    DeleteEmailController::invoke($imapClient, $config);
+} elseif (HasNewMessagesControllerJson::matches()) {
+    HasNewMessagesControllerJson::invoke($imapClient, $config);
+} else {
+    // If requesting the main site, just redirect to a new random mailbox.
+    RedirectToRandomAddressController::invoke($imapClient, $config);
 }
 
-/*
-|--------------------------------------------------------------------------
-| Register The Auto Loader
-|--------------------------------------------------------------------------
-|
-| Composer provides a convenient, automatically generated class loader for
-| this application. We just need to utilize it! We'll simply require it
-| into the script here so we don't need to manually load our classes.
-|
-*/
 
-require __DIR__.'/../vendor/autoload.php';
-
-/*
-|--------------------------------------------------------------------------
-| Run The Application
-|--------------------------------------------------------------------------
-|
-| Once we have the application, we can handle the incoming request using
-| the application's HTTP kernel. Then, we will send the response back
-| to this client's browser, allowing them to enjoy our application.
-|
-*/
-
-$app = require_once __DIR__.'/../bootstrap/app.php';
-
-$kernel = $app->make(Kernel::class);
-
-$response = $kernel->handle(
-    $request = Request::capture()
-)->send();
-
-$kernel->terminate($request, $response);
+// delete after each request
+$imapClient->delete_old_messages($config['delete_messages_older_than']);
